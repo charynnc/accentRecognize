@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from conformer import Conformer
+from models.custom_model import CustomModel
 from dataloader import get_dataloader
 
 def test(args):
@@ -26,13 +27,22 @@ def test(args):
     print(f"Classes: {test_loader.dataset.accent_to_index}")
 
     # Initialize Model
-    model = Conformer(
-        num_classes=num_classes,
-        input_dim=args.n_mels,
-        encoder_dim=args.encoder_dim,
-        num_encoder_layers=args.num_encoder_layers,
-        num_attention_heads=args.num_attention_heads
-    ).to(device)
+    if args.model == 'conformer':
+        model = Conformer(
+            num_classes=num_classes,
+            input_dim=args.n_mels,
+            encoder_dim=args.encoder_dim,
+            num_encoder_layers=args.num_encoder_layers,
+            num_attention_heads=args.num_attention_heads
+        ).to(device)
+    elif args.model == 'custom_model':
+        model = CustomModel(
+            num_classes=num_classes,
+            input_dim=args.n_mels,
+            encoder_dim=args.encoder_dim
+        ).to(device)
+    else:
+        raise ValueError(f"Unknown model: {args.model}")
 
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs!")
@@ -110,6 +120,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_attention_heads', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
     parser.add_argument('--augment', type=bool, default=False, help='Enable data augmentation')
+    parser.add_argument('--model', type=str, default='conformer', choices=['conformer', 'custom_model'], help='Model to use')
 
     args = parser.parse_args()
     test(args)

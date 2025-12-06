@@ -6,10 +6,11 @@ import torch.optim as optim
 import wandb
 from tqdm import tqdm
 from conformer import Conformer
+from models.custom_model import CustomModel
 from dataloader import get_dataloader
 
 def train(args):
-    wandb.init(project="accent", name="conformer", config=args)
+    wandb.init(project="accent", name=args.model, config=args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
@@ -38,13 +39,22 @@ def train(args):
     print(f"Classes: {train_loader.dataset.accent_to_index}")
 
     # Initialize Model
-    model = Conformer(
-        num_classes=num_classes,
-        input_dim=args.n_mels,
-        encoder_dim=args.encoder_dim,
-        num_encoder_layers=args.num_encoder_layers,
-        num_attention_heads=args.num_attention_heads
-    ).to(device)
+    if args.model == 'conformer':
+        model = Conformer(
+            num_classes=num_classes,
+            input_dim=args.n_mels,
+            encoder_dim=args.encoder_dim,
+            num_encoder_layers=args.num_encoder_layers,
+            num_attention_heads=args.num_attention_heads
+        ).to(device)
+    elif args.model == 'custom_model':
+        model = CustomModel(
+            num_classes=num_classes,
+            input_dim=args.n_mels,
+            encoder_dim=args.encoder_dim
+        ).to(device)
+    else:
+        raise ValueError(f"Unknown model: {args.model}")
 
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs!")
@@ -158,9 +168,21 @@ if __name__ == '__main__':
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_attention_heads', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
-    parser.add_argument('--augment', type=bool, default=False, help='Enable data augmentation')
+    parser.add_argument('--augment', type=bool, default=True, help='Whether to use data augmentation')
+    parser.add_argument('--model', type=str, default='conformer', choices=['conformer', 'custom_model'], help='Model to use')
 
     args = parser.parse_args()
+    
+    # Update save_dir based on model if not explicitly set to a model-specific path
+    # But user script sets it explicitly. Let's just append model name if it's a generic checkpoint dir?
+    # Or better, just rely on the script to pass the right dir. 
+    # However, the user asked to "modify savedir". 
+    # Let's assume the script passes a base dir or we append the model name.
+    # Given the existing script passes ./checkpoints/conformer, let's change the script to pass ./checkpoints 
+    # and let python append the model name, OR change the script to pass ./checkpoints/custom_model.
+    # I will modify the script to pass the full path, but I will also make sure the code creates the directory.
+    
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
 
-    os.makedirs(args.save_dir, exist_ok=True)
     train(args)

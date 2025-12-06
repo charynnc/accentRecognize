@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from typing import Tuple
+from models.chy import ResNet50
 
 class CustomModel(nn.Module):
     """
@@ -16,9 +17,8 @@ class CustomModel(nn.Module):
     ) -> None:
         super(CustomModel, self).__init__()
         
-        # TODO: Define your encoder here
-        # self.encoder = ...
-        self.encoder = None 
+        # Define your encoder here
+        self.encoder = ResNet50(input_dim=input_dim, encoder_dim=encoder_dim)
 
         self.fc = nn.Linear(encoder_dim, num_classes, bias=False)
 
@@ -37,12 +37,9 @@ class CustomModel(nn.Module):
         Returns:
             outputs (torch.FloatTensor): (batch, num_classes)
         """
-        # TODO: Implement encoder forward pass
-        # encoder_outputs, encoder_output_lengths = self.encoder(inputs, input_lengths)
+        # Implement encoder forward pass
+        encoder_outputs, _ = self.encoder(inputs, input_lengths)
         
-        # Placeholder logic (assuming encoder_outputs is available):
-        # outputs = encoder_outputs.mean(dim=1)
-        # outputs = self.fc(outputs)
-        # return outputs
-        
-        raise NotImplementedError("Encoder is not implemented. Please implement the encoder in __init__ and forward.")
+        # encoder_outputs is (batch, encoder_dim)
+        outputs = self.fc(encoder_outputs)
+        return outputs

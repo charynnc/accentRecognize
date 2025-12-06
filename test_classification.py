@@ -1,15 +1,15 @@
 import torch
 from conformer import Conformer
+from models.custom_model import CustomModel
 
 batch_size = 4
 sequence_length = 100
 dim = 80
 num_classes = 8
 
-model = Conformer(num_classes=num_classes, 
+model = CustomModel(num_classes=num_classes, 
                   input_dim=dim, 
-                  encoder_dim=32, 
-                  num_encoder_layers=3)
+                  encoder_dim=32)
 
 inputs = torch.rand(batch_size, sequence_length, dim)
 input_lengths = torch.LongTensor([100, 90, 80, 70])
