@@ -5,7 +5,8 @@ import torch.nn as nn
 from tqdm import tqdm
 from conformer import Conformer
 from models.custom_model import CustomModel
-from dataloader import get_dataloader
+# from dataloaders.speech_accent_archive import get_dataloader
+from dataloaders.st_cmds import get_dataloader
 
 def test(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -18,7 +19,7 @@ def test(args):
         split='test',
         num_workers=args.num_workers,
         n_mels=args.n_mels,
-        augment=True
+        augment=args.augment
     )
 
     # Get number of classes from dataset
@@ -94,8 +95,15 @@ def test(args):
             c = (predicted == target_indices).squeeze()
             for i in range(len(targets)):
                 label = target_indices[i]
-                class_correct[label] += c[i].item()
+                if c.ndim == 0:
+                    class_correct[label] += c.item()
+                else:
+                    class_correct[label] += c[i].item()
                 class_total[label] += 1
+
+                pred_name = test_loader.dataset.index_to_accent[predicted[i].item()]
+                true_name = test_loader.dataset.index_to_accent[label.item()]
+                pbar.write(f"Predicted: {pred_name}, True: {true_name}")
 
             pbar.set_postfix({'loss': test_loss / (pbar.n + 1), 'acc': 100 * correct / total})
 

@@ -92,8 +92,58 @@ class ResNet50(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
+        if input_lengths is not None:
+            # Global Average Pooling with Masking
+            B, C, H_out, W_out = x.shape
+            max_len = x.size(3) # This is W_out, but we need original max len to scale
+            # Actually, we can just use the ratio of W_out / original_max_len
+            # But we don't have original_max_len easily available here unless we stored it or passed it.
+            # Wait, x input to forward is (batch, seq_length, dimension).
+            # But we permuted it.
+            # Let's assume input_lengths corresponds to the seq_length dimension.
+            
+            # We need the max length of the input batch to calculate the ratio.
+            # input_lengths is a tensor of real lengths.
+            # The input x (before permute) had shape[1] as max_len.
+            # But we don't have access to original x shape here easily unless we check input_lengths.max()
+            # But input_lengths might be just the valid lengths, max(input_lengths) <= seq_len.
+            # Usually seq_len = max(input_lengths) in a batch (padded).
+            
+            # Let's assume max(input_lengths) is close enough to the padded length, 
+            # or better, just use the max value in input_lengths as the reference for the current batch's max time.
+            # BUT, if the batch was padded to a fixed length larger than max(input_lengths), this ratio is wrong.
+            # However, usually collate_fn pads to max(lengths) in the batch.
+            # So max(input_lengths) == seq_len.
+            
+            max_seq_len = input_lengths.max().float()
+            
+            mask = torch.zeros((B, 1, 1, W_out), device=x.device)
+            valid_areas = torch.ones((B, 1), device=x.device)
+            
+            for i in range(B):
+                # Calculate valid length in feature map
+                # ratio = input_lengths[i] / max_seq_len
+                # valid_l = ratio * W_out
+                
+                # Avoid division by zero
+                if max_seq_len > 0:
+                    valid_l = int(torch.round((input_lengths[i] / max_seq_len) * W_out).item())
+                else:
+                    valid_l = 0
+                
+                valid_l = max(1, min(valid_l, W_out))
+                
+                mask[i, :, :, :valid_l] = 1.0
+                valid_areas[i] = valid_l * H_out
+            
+            x = x * mask
+            x = x.sum(dim=(2, 3)) # Sum over H and W
+            x = x / valid_areas # Average
+            
+        else:
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            
         x = self.fc(x)
 
         return x, input_lengths

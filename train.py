@@ -7,7 +7,8 @@ import wandb
 from tqdm import tqdm
 from conformer import Conformer
 from models.custom_model import CustomModel
-from dataloader import get_dataloader
+# from dataloaders.speech_accent_archive import get_dataloader
+from dataloaders.st_cmds import get_dataloader
 
 def train(args):
     wandb.init(project="accent", name=args.model, config=args)
@@ -60,9 +61,27 @@ def train(args):
         print(f"Using {torch.cuda.device_count()} GPUs!")
         model = nn.DataParallel(model)
 
+    # Calculate class weights for imbalanced dataset
+    print("Calculating class weights...")
+    class_counts = [0] * num_classes
+    for sample in train_loader.dataset.samples:
+        class_counts[sample['accent_index']] += 1
+    
+    # Avoid division by zero if a class is missing in training set (though unlikely)
+    class_counts = [c if c > 0 else 1 for c in class_counts]
+    
+    # Weight = Total / (Num_Classes * Class_Count)
+    total_samples = sum(class_counts)
+    class_weights = [total_samples / (num_classes * c) for c in class_counts]
+    class_weights = torch.FloatTensor(class_weights).to(device)
+    
+    print(f"Class weights: {class_weights}")
+
     # Loss and Optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
+
+    
 
     # Training Loop
     best_acc = 0.0
@@ -154,12 +173,16 @@ def train(args):
             torch.save(model.state_dict(), os.path.join(args.save_dir, 'best_model.pth'))
             print(f"Saved best model with Acc: {best_acc:.2f}%")
 
+        # Save last model
+        torch.save(model.state_dict(), os.path.join(args.save_dir, 'last_model.pth'))
+
     print("Training finished.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train Conformer for Classification')
     parser.add_argument('--data_dir', type=str, required=True, help='Path to data directory')
     parser.add_argument('--save_dir', type=str, default='./checkpoints', help='Directory to save models')
+    parser.add_argument('--resume', type=str, default='', help='Path to checkpoint to resume from')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--epochs', type=int, default=20, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')

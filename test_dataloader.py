@@ -2,12 +2,13 @@
 
 import argparse
 
-from dataloader import get_dataloader
+# from dataloaders.speech_accent_archive import get_dataloader
+from dataloaders.st_cmds import get_dataloader
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', help='Root data directory (e.g. data/)', default='/home1/chenhaoyang/data/accentDB/')
+    parser.add_argument('--data_dir', help='Root data directory (e.g. data/)', default='/home1/chenhaoyang/data/ST-CMDS/')
     parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--num-workers', type=int, default=0)
     parser.add_argument('--split', choices=['train', 'val', 'test'], default='train')
@@ -17,7 +18,7 @@ def main():
 
     dl = get_dataloader(args.data_dir,
                         batch_size=args.batch_size,
-                        shuffle=False,
+                        shuffle=True,
                         num_workers=args.num_workers,
                         split=args.split)
 
