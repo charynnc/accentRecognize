@@ -1,12 +1,12 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1,2
-MODEL="conformer"
+export CUDA_VISIBLE_DEVICES=2
+MODEL="custom_model"
 
 # Run training
 python train.py \
     --data_dir /home1/chenhaoyang/data/ST-CMDS/ \
-    --save_dir ./checkpoints/$MODEL \
+    --save_dir ./checkpoints/2$MODEL \
     --model $MODEL \
     --batch_size 32 \
     --epochs 50 \
@@ -17,4 +17,5 @@ python train.py \
     --num_attention_heads 4 \
     --num_workers 0 \
     --augment False \
+    # --win_enable
     # --resume ./checkpoints/$MODEL/best_model.pth

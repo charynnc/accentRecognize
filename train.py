@@ -2,13 +2,14 @@ import os
 import argparse
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import wandb
 from tqdm import tqdm
 from conformer import Conformer
 from models.custom_model import CustomModel
 # from dataloaders.speech_accent_archive import get_dataloader
-from dataloaders.st_cmds import get_dataloader
+from dataloaders.st_cmds_preprocessed import get_dataloader
 
 def train(args):
     wandb.init(project="accent", name=args.model, config=args)
@@ -18,19 +19,21 @@ def train(args):
     # Create DataLoaders
     train_loader = get_dataloader(
         root_dir=args.data_dir,
+        feature_dir=os.path.join(args.data_dir, 'features'),
         batch_size=args.batch_size,
         split='train',
         num_workers=args.num_workers,
-        n_mels=args.n_mels,
+        # n_mels=args.n_mels,
         augment=args.augment
     )
     
     val_loader = get_dataloader(
         root_dir=args.data_dir,
+        feature_dir=os.path.join(args.data_dir, 'features'),
         batch_size=args.batch_size,
         split='val',
         num_workers=args.num_workers,
-        n_mels=args.n_mels,
+        # n_mels=args.n_mels,
         augment=args.augment
     )
 
@@ -52,7 +55,7 @@ def train(args):
         model = CustomModel(
             num_classes=num_classes,
             input_dim=args.n_mels,
-            encoder_dim=args.encoder_dim
+            encoder_dim=args.encoder_dim,
         ).to(device)
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -102,7 +105,32 @@ def train(args):
 
             # Forward + Backward + Optimize
             outputs = model(inputs, input_lengths)
-            loss = criterion(outputs, targets)
+            ce_loss = criterion(outputs, targets)
+            
+            # Custom Distribution Loss
+            probs = F.softmax(outputs, dim=1)
+            batch_pred_sum = torch.sum(probs, dim=0)
+            
+            if targets.dim() > 1:
+                one_hot_targets = targets.float()
+            else:
+                one_hot_targets = F.one_hot(targets, num_classes=num_classes).float()
+            
+            batch_target_sum = torch.sum(one_hot_targets, dim=0)
+            
+            # Sort both vectors to match the distribution shape (diversity constraint), 
+            # ignoring specific class alignment which CE loss already handles.
+            batch_pred_sum_sorted, _ = torch.sort(batch_pred_sum, descending=True)
+            batch_target_sum_sorted, _ = torch.sort(batch_target_sum, descending=True)
+
+            # L2 Loss between the sorted sums
+            dist_loss = torch.norm(batch_pred_sum_sorted - batch_target_sum_sorted, p=1)
+            dist_loss = dist_loss / inputs.size(0)  # Normalize by batch size
+            # Weight for the distribution loss
+            dist_lambda = 0.00
+
+            loss = ce_loss + dist_lambda * dist_loss
+
             loss.backward()
             optimizer.step()
 
@@ -121,6 +149,9 @@ def train(args):
             pbar.set_postfix({'loss': running_loss / (pbar.n + 1), 'acc': 100 * correct / total})
             wandb.log({
                 "train_step_loss": loss.item(),
+                "train_step_ce_loss": ce_loss.item(),
+                "train_step_dist_loss": dist_loss.item(),
+                "train_step_cons_loss": 0.0,
                 "train_step_acc": 100 * correct / total
             })
 
@@ -193,6 +224,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
     parser.add_argument('--augment', type=bool, default=True, help='Whether to use data augmentation')
     parser.add_argument('--model', type=str, default='conformer', choices=['conformer', 'custom_model'], help='Model to use')
+
+    # (sliding-window related args removed)
 
     args = parser.parse_args()
     

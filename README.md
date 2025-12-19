@@ -13,7 +13,8 @@
 ```
 
 ### 使用方法
-训练：`bash train.py`
+训练：先预处理提取特征`python ./dataloaders/preprocess_st_cmds.py --root_dir datadir`
+之后`bash train.py`
 
 测试：`bash test.py`
 

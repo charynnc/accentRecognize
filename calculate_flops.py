@@ -7,23 +7,26 @@ def calculate_flops_params():
     # Define model parameters
     num_classes = 8
     input_dim = 80
-    encoder_dim = 512
-    encoder_layers = 6
+    encoder_dim = 256
+    encoder_layers = 12
     attention_heads = 4
     
     # Instantiate the model
-    # model = CustomModel(num_classes=num_classes, 
-    #                     input_dim=input_dim, 
-    #                     encoder_dim=encoder_dim)
-    model = Conformer(num_classes=num_classes,
-                      input_dim=input_dim,
-                      encoder_dim=encoder_dim,
-                      num_encoder_layers=encoder_layers,
-                      num_attention_heads=attention_heads)
+
+    model = CustomModel(
+            num_classes=num_classes,
+            input_dim=input_dim,
+            encoder_dim=encoder_dim,
+        )
+    # model = Conformer(num_classes=num_classes,
+    #                   input_dim=input_dim,
+    #                   encoder_dim=encoder_dim,
+    #                   num_encoder_layers=encoder_layers,
+    #                   num_attention_heads=attention_heads)
     
     # Create dummy input
     batch_size = 1
-    sequence_length = 200 # Example sequence length
+    sequence_length = 300 # Example sequence length
     inputs = torch.randn(batch_size, sequence_length, input_dim)
     input_lengths = torch.tensor([sequence_length])
     
@@ -32,7 +35,6 @@ def calculate_flops_params():
     # We need to pass inputs as a tuple
     flops, params = profile(model, inputs=(inputs, input_lengths), verbose=False)
     
-    print(f"Model: CustomModel (ResNet50 Encoder)")
     print(f"Input shape: (Batch: {batch_size}, Time: {sequence_length}, Freq: {input_dim})")
     print(f"FLOPs: {flops / 1e9:.2f} G")
     print(f"Parameters: {params / 1e6:.2f} M")

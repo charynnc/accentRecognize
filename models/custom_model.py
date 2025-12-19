@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from typing import Tuple
-from models.chy import ResNet50
+from typing import Any
+from models.chy2 import ResNet18,SEResNet18, TDSEResNet18
 
 class CustomModel(nn.Module):
     """
@@ -18,7 +18,7 @@ class CustomModel(nn.Module):
         super(CustomModel, self).__init__()
         
         # Define your encoder here
-        self.encoder = ResNet50(input_dim=input_dim, encoder_dim=encoder_dim)
+        self.encoder = TDSEResNet18(input_dim=input_dim, encoder_dim=encoder_dim, base_width=32)
 
         self.fc = nn.Linear(encoder_dim, num_classes, bias=False)
 
@@ -26,7 +26,11 @@ class CustomModel(nn.Module):
         """ Count parameters of model """
         return sum(p.numel() for p in self.parameters())
 
-    def forward(self, inputs: Tensor, input_lengths: Tensor) -> Tensor:
+    def forward(
+        self,
+        inputs: Tensor,
+        input_lengths: Tensor,
+    ):
         """
         Forward propagate a `inputs` for training.
 
@@ -37,9 +41,21 @@ class CustomModel(nn.Module):
         Returns:
             outputs (torch.FloatTensor): (batch, num_classes)
         """
-        # Implement encoder forward pass
         encoder_outputs, _ = self.encoder(inputs, input_lengths)
-        
-        # encoder_outputs is (batch, encoder_dim)
         outputs = self.fc(encoder_outputs)
         return outputs
+
+
+if __name__ == "__main__":
+    # Simple test
+    b, t, f = 4, 300, 80
+    x = torch.randn(b, t, f)
+    lengths = torch.tensor([300, 250, 200, 150])
+
+    model = CustomModel(num_classes=5, input_dim=f, encoder_dim=256)
+    model.eval()
+
+    with torch.no_grad():
+        logits = model(x, lengths)
+
+    print("Logits shape:", logits.shape)

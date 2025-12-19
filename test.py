@@ -6,7 +6,7 @@ from tqdm import tqdm
 from conformer import Conformer
 from models.custom_model import CustomModel
 # from dataloaders.speech_accent_archive import get_dataloader
-from dataloaders.st_cmds import get_dataloader
+from dataloaders.st_cmds_preprocessed import get_dataloader
 
 def test(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -15,10 +15,10 @@ def test(args):
     # Create DataLoader for test split
     test_loader = get_dataloader(
         root_dir=args.data_dir,
+        feature_dir=os.path.join(args.data_dir, 'features'),
         batch_size=args.batch_size,
         split='test',
         num_workers=args.num_workers,
-        n_mels=args.n_mels,
         augment=args.augment
     )
 
@@ -40,7 +40,7 @@ def test(args):
         model = CustomModel(
             num_classes=num_classes,
             input_dim=args.n_mels,
-            encoder_dim=args.encoder_dim
+            encoder_dim=args.encoder_dim,
         ).to(device)
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -103,7 +103,7 @@ def test(args):
 
                 pred_name = test_loader.dataset.index_to_accent[predicted[i].item()]
                 true_name = test_loader.dataset.index_to_accent[label.item()]
-                pbar.write(f"Predicted: {pred_name}, True: {true_name}")
+                # pbar.write(f"Predicted: {pred_name}, True: {true_name}")
 
             pbar.set_postfix({'loss': test_loss / (pbar.n + 1), 'acc': 100 * correct / total})
 

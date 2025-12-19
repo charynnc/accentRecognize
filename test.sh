@@ -1,11 +1,11 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=3,4
-MODEL="conformer"
+export CUDA_VISIBLE_DEVICES=3
+MODEL="custom_model"
 # Run testing
 python test.py \
     --data_dir /home1/chenhaoyang/data/ST-CMDS/ \
-    --model_path ./checkpoints/$MODEL/best_model.pth \
+    --model_path ./checkpoints/2$MODEL/best_model.pth \
     --model $MODEL \
     --batch_size 32 \
     --n_mels 80 \

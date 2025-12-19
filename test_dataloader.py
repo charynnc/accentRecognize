@@ -1,9 +1,10 @@
 """Small script to test the dataloader module and inspect per-speaker split stats."""
 
 import argparse
+import os
 
 # from dataloaders.speech_accent_archive import get_dataloader
-from dataloaders.st_cmds import get_dataloader
+from dataloaders.st_cmds_preprocessed import get_dataloader
 
 
 def main():
@@ -17,8 +18,8 @@ def main():
     args = parser.parse_args()
 
     dl = get_dataloader(args.data_dir,
+                        feature_dir=os.path.join(args.data_dir, 'features'),
                         batch_size=args.batch_size,
-                        shuffle=True,
                         num_workers=args.num_workers,
                         split=args.split)
 
