@@ -19,7 +19,8 @@ def test(args):
         batch_size=args.batch_size,
         split='test',
         num_workers=args.num_workers,
-        augment=args.augment
+        augment=args.augment,
+        use_pinyin=args.use_pinyin
     )
 
     # Get number of classes from dataset
@@ -37,10 +38,14 @@ def test(args):
             num_attention_heads=args.num_attention_heads
         ).to(device)
     elif args.model == 'custom_model':
+        pinyin_vocab_size = len(test_loader.dataset.index_to_pinyin) if args.use_pinyin else 0
+        print(f"Pinyin Vocab Size: {pinyin_vocab_size}")
         model = CustomModel(
             num_classes=num_classes,
             input_dim=args.n_mels,
             encoder_dim=args.encoder_dim,
+            use_pinyin=args.use_pinyin,
+            pinyin_vocab_size=pinyin_vocab_size
         ).to(device)
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -76,8 +81,18 @@ def test(args):
             inputs = batch['inputs'].to(device)
             input_lengths = batch['input_lengths'].to(device)
             targets = batch['accent_indices'].to(device)
+            
+            pinyin_inputs = None
+            pinyin_lengths = None
+            if args.use_pinyin and 'pinyin_inputs' in batch:
+                pinyin_inputs = batch['pinyin_inputs'].to(device)
+                pinyin_lengths = batch['pinyin_lengths'].to(device)
 
-            outputs = model(inputs, input_lengths)
+            if args.model == 'custom_model':
+                outputs = model(inputs, input_lengths, pinyin_inputs, pinyin_lengths)
+            else:
+                outputs = model(inputs, input_lengths)
+            
             loss = criterion(outputs, targets)
 
             test_loss += loss.item()
@@ -129,6 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
     parser.add_argument('--augment', type=bool, default=False, help='Enable data augmentation')
     parser.add_argument('--model', type=str, default='conformer', choices=['conformer', 'custom_model'], help='Model to use')
+    parser.add_argument('--use_pinyin', action='store_true', help='Whether to use Pinyin features')
 
     args = parser.parse_args()
     test(args)

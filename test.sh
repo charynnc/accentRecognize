@@ -13,4 +13,5 @@ python test.py \
     --num_encoder_layers 6 \
     --num_attention_heads 4 \
     --num_workers 0 \
-    --augment False
+    --augment False \
+    --use_pinyin

@@ -17,5 +17,6 @@ python train.py \
     --num_attention_heads 4 \
     --num_workers 0 \
     --augment False \
+    --use_pinyin
     # --win_enable
     # --resume ./checkpoints/$MODEL/best_model.pth
