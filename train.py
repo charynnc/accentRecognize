@@ -54,14 +54,20 @@ def train(args):
             num_attention_heads=args.num_attention_heads
         ).to(device)
     elif args.model == 'custom_model':
-        pinyin_vocab_size = len(train_loader.dataset.index_to_pinyin) if args.use_pinyin else 0
-        print(f"Pinyin Vocab Size: {pinyin_vocab_size}")
+        vocab_sizes = {}
+        if args.use_pinyin:
+            vocab_sizes['initials'] = len(train_loader.dataset.initials)
+            vocab_sizes['finals'] = len(train_loader.dataset.finals)
+            vocab_sizes['tones'] = len(train_loader.dataset.tones)
+            print(f"Vocab Sizes: {vocab_sizes}")
+            
         model = CustomModel(
             num_classes=num_classes,
             input_dim=args.n_mels,
             encoder_dim=args.encoder_dim,
             use_pinyin=args.use_pinyin,
-            pinyin_vocab_size=pinyin_vocab_size
+            vocab_sizes=vocab_sizes,
+            dropout=args.dropout
         ).to(device)
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -87,8 +93,8 @@ def train(args):
     print(f"Class weights: {class_weights}")
 
     # Loss and Optimizer
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     
 
@@ -106,10 +112,15 @@ def train(args):
             input_lengths = batch['input_lengths'].to(device)
             targets = batch['accent_indices'].to(device)
             
-            pinyin_inputs = None
+            initial_inputs = None
+            final_inputs = None
+            tone_inputs = None
             pinyin_lengths = None
-            if args.use_pinyin and 'pinyin_inputs' in batch:
-                pinyin_inputs = batch['pinyin_inputs'].to(device)
+            
+            if args.use_pinyin and 'initial_inputs' in batch:
+                initial_inputs = batch['initial_inputs'].to(device)
+                final_inputs = batch['final_inputs'].to(device)
+                tone_inputs = batch['tone_inputs'].to(device)
                 pinyin_lengths = batch['pinyin_lengths'].to(device)
 
             # Zero the parameter gradients
@@ -117,7 +128,7 @@ def train(args):
 
             # Forward + Backward + Optimize
             if args.model == 'custom_model':
-                outputs = model(inputs, input_lengths, pinyin_inputs, pinyin_lengths)
+                outputs = model(inputs, input_lengths, initial_inputs, final_inputs, tone_inputs, pinyin_lengths)
             else:
                 outputs = model(inputs, input_lengths)
             
@@ -187,14 +198,19 @@ def train(args):
                 input_lengths = batch['input_lengths'].to(device)
                 targets = batch['accent_indices'].to(device)
                 
-                pinyin_inputs = None
+                initial_inputs = None
+                final_inputs = None
+                tone_inputs = None
                 pinyin_lengths = None
-                if args.use_pinyin and 'pinyin_inputs' in batch:
-                    pinyin_inputs = batch['pinyin_inputs'].to(device)
+                
+                if args.use_pinyin and 'initial_inputs' in batch:
+                    initial_inputs = batch['initial_inputs'].to(device)
+                    final_inputs = batch['final_inputs'].to(device)
+                    tone_inputs = batch['tone_inputs'].to(device)
                     pinyin_lengths = batch['pinyin_lengths'].to(device)
 
                 if args.model == 'custom_model':
-                    outputs = model(inputs, input_lengths, pinyin_inputs, pinyin_lengths)
+                    outputs = model(inputs, input_lengths, initial_inputs, final_inputs, tone_inputs, pinyin_lengths)
                 else:
                     outputs = model(inputs, input_lengths)
                 
@@ -251,6 +267,7 @@ if __name__ == '__main__':
     parser.add_argument('--augment', type=bool, default=True, help='Whether to use data augmentation')
     parser.add_argument('--model', type=str, default='conformer', choices=['conformer', 'custom_model'], help='Model to use')
     parser.add_argument('--use_pinyin', action='store_true', help='Whether to use Pinyin features')
+    parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate')
 
     # (sliding-window related args removed)
 

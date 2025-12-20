@@ -15,8 +15,9 @@ python train.py \
     --encoder_dim 256 \
     --num_encoder_layers 6 \
     --num_attention_heads 4 \
-    --num_workers 0 \
+    --num_workers 4 \
     --augment False \
+    --dropout 0.4 \
     --use_pinyin
     # --win_enable
     # --resume ./checkpoints/$MODEL/best_model.pth

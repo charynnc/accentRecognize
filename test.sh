@@ -12,6 +12,5 @@ python test.py \
     --encoder_dim 256 \
     --num_encoder_layers 6 \
     --num_attention_heads 4 \
-    --num_workers 0 \
-    --augment False \
+    --num_workers 4 \
     --use_pinyin

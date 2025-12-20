@@ -101,21 +101,27 @@ class WavBIRDatasetPreprocessed(Dataset):
                 })
         
         if self.use_pinyin:
-            vocab_path = os.path.join(self.root_dir, 'pinyin_vocab.txt')
-            if os.path.exists(vocab_path):
-                print(f"Loading Pinyin vocab from {vocab_path}")
-                with open(vocab_path, 'r', encoding='utf-8') as f:
-                    self.index_to_pinyin = [line.strip() for line in f]
-                self.pinyin_to_index = {py: idx for idx, py in enumerate(self.index_to_pinyin)}
+            self.initials = ['<pad>', '<unk>']
+            self.finals = ['<pad>', '<unk>']
+            self.tones = ['<pad>', '<unk>', '0', '1', '2', '3', '4']
+            
+            init_vocab_path = os.path.join(self.root_dir, 'initials_vocab.txt')
+            final_vocab_path = os.path.join(self.root_dir, 'finals_vocab.txt')
+            
+            if os.path.exists(init_vocab_path) and os.path.exists(final_vocab_path):
+                print(f"Loading vocabs from {init_vocab_path} and {final_vocab_path}")
+                with open(init_vocab_path, 'r', encoding='utf-8') as f:
+                    self.initials = [line.strip() for line in f]
+                with open(final_vocab_path, 'r', encoding='utf-8') as f:
+                    self.finals = [line.strip() for line in f]
             else:
-                print("Pinyin vocab not found. Building from ALL data in CSV...")
-                all_pinyins = set()
-                # Scan ALL rows in CSV to ensure vocab is complete regardless of current split
+                print("Building decomposed vocabs from ALL data...")
+                all_initials = set()
+                all_finals = set()
+                
                 for r in all_rows:
-                    # Construct path for every file in CSV
                     fname = r['filename']
                     base = os.path.splitext(fname)[0]
-                    # Try multiple locations
                     possible_paths = [
                         os.path.join(self.root_dir, 'recordings', base + '.txt'),
                         os.path.join(self.root_dir, base + '.txt'),
@@ -132,26 +138,32 @@ class WavBIRDatasetPreprocessed(Dataset):
                             with open(t_path, 'r', encoding='utf-8') as f:
                                 text = f.read().strip()
                             if pinyin:
-                                pys = [p[0] for p in pinyin(text, style=Style.TONE3, errors='ignore')]
-                                all_pinyins.update(pys)
-                        except Exception as e:
-                            pass # Ignore errors during vocab build
+                                inis = [p[0] for p in pinyin(text, style=Style.INITIALS, errors='ignore', strict=False)]
+                                fins = [p[0] for p in pinyin(text, style=Style.FINALS, errors='ignore', strict=False)]
+                                all_initials.update(inis)
+                                all_finals.update(fins)
+                        except Exception:
+                            pass
                 
-                # Sort and build index
-                sorted_pinyins = sorted(list(all_pinyins))
-                for py in sorted_pinyins:
-                    self.pinyin_to_index[py] = len(self.index_to_pinyin)
-                    self.index_to_pinyin.append(py)
+                for x in sorted(list(all_initials)):
+                    if x == "": x = "_" # Handle empty initial
+                    if x not in self.initials: self.initials.append(x)
+                for x in sorted(list(all_finals)):
+                    if x not in self.finals: self.finals.append(x)
                 
-                print(f"Built Pinyin vocab (size: {len(self.index_to_pinyin)})")
-                # Save it for next time
+                # Save
                 try:
-                    with open(vocab_path, 'w', encoding='utf-8') as f:
-                        for py in self.index_to_pinyin:
-                            f.write(py + '\n')
-                    print(f"Saved Pinyin vocab to {vocab_path}")
+                    with open(init_vocab_path, 'w', encoding='utf-8') as f:
+                        for x in self.initials: f.write(x + '\n')
+                    with open(final_vocab_path, 'w', encoding='utf-8') as f:
+                        for x in self.finals: f.write(x + '\n')
+                    print(f"Built vocabs: Initials={len(self.initials)}, Finals={len(self.finals)}")
                 except Exception as e:
                     print(f"Could not save vocab file: {e}")
+
+            self.initial_to_idx = {x: i for i, x in enumerate(self.initials)}
+            self.final_to_idx = {x: i for i, x in enumerate(self.finals)}
+            self.tone_to_idx = {x: i for i, x in enumerate(self.tones)}
 
         rng = random.Random(42)
         rng.shuffle(self.samples)
@@ -196,14 +208,32 @@ class WavBIRDatasetPreprocessed(Dataset):
             std[std < 1e-6] = 1.0
             feats = (feats - mu) / std
 
-        pinyin_indices = []
+        initial_indices = []
+        final_indices = []
+        tone_indices = []
+        
         if self.use_pinyin and sample['txt_path'] and os.path.exists(sample['txt_path']):
             try:
                 with open(sample['txt_path'], 'r', encoding='utf-8') as f:
                     text = f.read().strip()
                 if pinyin:
-                    pys = [p[0] for p in pinyin(text, style=Style.TONE3, errors='ignore')]
-                    pinyin_indices = [self.pinyin_to_index.get(py, self.pinyin_to_index['<unk>']) for py in pys]
+                    # Extract components
+                    inis = [p[0] for p in pinyin(text, style=Style.INITIALS, errors='ignore', strict=False)]
+                    fins = [p[0] for p in pinyin(text, style=Style.FINALS, errors='ignore', strict=False)]
+                    # Extract tones from TONE3 style
+                    pys_tone = [p[0] for p in pinyin(text, style=Style.TONE3, errors='ignore')]
+                    
+                    for ini, fin, py_tone in zip(inis, fins, pys_tone):
+                        if ini == "": ini = "_"
+                        
+                        tone = "0"
+                        if py_tone[-1].isdigit():
+                            tone = py_tone[-1]
+                            
+                        initial_indices.append(self.initial_to_idx.get(ini, self.initial_to_idx['<unk>']))
+                        final_indices.append(self.final_to_idx.get(fin, self.final_to_idx['<unk>']))
+                        tone_indices.append(self.tone_to_idx.get(tone, self.tone_to_idx['<unk>']))
+                        
             except Exception as e:
                 print(f"Error reading {sample['txt_path']} in __getitem__: {e}")
 
@@ -215,8 +245,10 @@ class WavBIRDatasetPreprocessed(Dataset):
             'accent_index': sample['accent_index'],
             'speaker': '',
             'num_accents': len(self.accent_to_index),
-            'pinyin_indices': torch.LongTensor(pinyin_indices),
-            'pinyin_length': len(pinyin_indices)
+            'initial_indices': torch.LongTensor(initial_indices),
+            'final_indices': torch.LongTensor(final_indices),
+            'tone_indices': torch.LongTensor(tone_indices),
+            'pinyin_length': len(initial_indices)
         }
 
 def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
@@ -248,17 +280,24 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
         'accent_onehot': accent_onehot,
     }
 
-    if 'pinyin_indices' in batch[0]:
+    if 'initial_indices' in batch[0]:
         pinyin_lengths = [item['pinyin_length'] for item in batch]
         max_pinyin_len = max(pinyin_lengths) if pinyin_lengths else 0
-        # Pad with 0 (which is <pad>)
-        pinyin_inputs = torch.zeros((len(batch), max_pinyin_len), dtype=torch.long)
+        
+        initial_inputs = torch.zeros((len(batch), max_pinyin_len), dtype=torch.long)
+        final_inputs = torch.zeros((len(batch), max_pinyin_len), dtype=torch.long)
+        tone_inputs = torch.zeros((len(batch), max_pinyin_len), dtype=torch.long)
+        
         for i, item in enumerate(batch):
             l = item['pinyin_length']
             if l > 0:
-                pinyin_inputs[i, :l] = item['pinyin_indices']
+                initial_inputs[i, :l] = item['initial_indices']
+                final_inputs[i, :l] = item['final_indices']
+                tone_inputs[i, :l] = item['tone_indices']
         
-        result['pinyin_inputs'] = pinyin_inputs
+        result['initial_inputs'] = initial_inputs
+        result['final_inputs'] = final_inputs
+        result['tone_inputs'] = tone_inputs
         result['pinyin_lengths'] = torch.LongTensor(pinyin_lengths)
     
     return result
