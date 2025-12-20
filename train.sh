@@ -5,7 +5,7 @@ MODEL="custom_model"
 
 # Run training
 python train.py \
-    --data_dir /home1/chenhaoyang/data/ST-CMDS/ \
+    --data_dir /data_extend/fcy/dl/datasets/ \
     --save_dir ./checkpoints/2$MODEL \
     --model $MODEL \
     --batch_size 32 \

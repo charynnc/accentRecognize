@@ -68,7 +68,7 @@ def process_file(row, root_dir, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess ST-CMDS dataset to Mel spectrograms")
-    parser.add_argument('--root_dir', type=str, default='/home1/chenhaoyang/data/ST-CMDS/', help="Root directory of the dataset containing metadata_split.csv")
+    parser.add_argument('--root_dir', type=str, default='/data_extend/fcy/dl/datasets/', help="Root directory of the dataset containing metadata_split.csv")
     parser.add_argument('--csv_filename', type=str, default='metadata_split.csv', help="Metadata CSV filename")
     parser.add_argument('--num_workers', type=int, default=8, help="Number of parallel workers")
     
