@@ -6,7 +6,7 @@ MODEL="custom_model"
 # Run training
 python train.py \
     --data_dir /data_extend/fcy/dl/datasets/ \
-    --save_dir ./checkpoints/2$MODEL \
+    --save_dir ./checkpoints/5$MODEL \
     --model $MODEL \
     --batch_size 32 \
     --epochs 50 \

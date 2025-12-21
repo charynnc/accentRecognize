@@ -19,7 +19,7 @@ def test(args):
         batch_size=args.batch_size,
         split='test',
         num_workers=args.num_workers,
-        augment=args.augment,
+        augment=True,
         use_pinyin=args.use_pinyin
     )
 

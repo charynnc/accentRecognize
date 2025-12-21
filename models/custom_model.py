@@ -62,6 +62,61 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
+class DecomposedPhoneticEncoder(nn.Module):
+    """
+    Encodes decomposed pinyin sequences (Initials, Finals, Tones) into a fixed-size vector.
+    """
+    def __init__(self, vocab_sizes, embed_dim, output_dim, dropout=0.1):
+        super(DecomposedPhoneticEncoder, self).__init__()
+        
+        dim_init = embed_dim // 4
+        dim_tone = embed_dim // 4
+        dim_final = embed_dim - dim_init - dim_tone
+        
+        self.initial_embed = nn.Embedding(vocab_sizes['initials'], dim_init, padding_idx=0)
+        self.final_embed = nn.Embedding(vocab_sizes['finals'], dim_final, padding_idx=0)
+        self.tone_embed = nn.Embedding(vocab_sizes['tones'], dim_tone, padding_idx=0)
+
+        self.pos_encoder = PositionalEncoding(embed_dim, dropout)
+        encoder_layers = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4, dim_feedforward=embed_dim*4, dropout=dropout, batch_first=True)
+        self.transformer = nn.TransformerEncoder(encoder_layers, num_layers=2)
+        
+        self.proj = nn.Linear(embed_dim, output_dim)
+        self.pool = AttentionPooling(output_dim)
+        self.norm = nn.LayerNorm(output_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, initial_inputs, final_inputs, tone_inputs, lengths):
+        # Embeddings
+        emb_init = self.initial_embed(initial_inputs)
+        emb_final = self.final_embed(final_inputs)
+        emb_tone = self.tone_embed(tone_inputs)
+        
+        x = torch.cat([emb_init, emb_final, emb_tone], dim=-1)
+        
+        # Positional Encoding
+        x = self.pos_encoder(x)
+
+        # Padding Mask
+        B, T, _ = x.size()
+        src_key_padding_mask = torch.arange(T, device=x.device).expand(B, T) >= lengths.unsqueeze(1)
+
+        # Transformer
+        x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)
+        
+        # Projection
+        x = self.proj(x)
+        
+        # Pooling
+        pool_mask = ~src_key_padding_mask
+        x = self.pool(x, pool_mask)
+        
+        # Norm & Dropout
+        x = self.norm(x)
+        x = self.dropout(x)
+        
+        return x
+
 class CustomModel(nn.Module):
     """
     Custom Model structure similar to Conformer.
@@ -86,26 +141,20 @@ class CustomModel(nn.Module):
         self.encoder = TDSEResNet18(input_dim=input_dim, encoder_dim=encoder_dim, base_width=32)
 
         if self.use_pinyin:
-            # Decomposed Embeddings
-            dim_init = pinyin_embed_dim // 4
-            dim_tone = pinyin_embed_dim // 4
-            dim_final = pinyin_embed_dim - dim_init - dim_tone
+            self.phonetic_encoder = DecomposedPhoneticEncoder(
+                vocab_sizes=vocab_sizes,
+                embed_dim=pinyin_embed_dim,
+                output_dim=encoder_dim,
+                dropout=dropout
+            )
             
-            self.initial_embed = nn.Embedding(vocab_sizes['initials'], dim_init, padding_idx=0)
-            self.final_embed = nn.Embedding(vocab_sizes['finals'], dim_final, padding_idx=0)
-            self.tone_embed = nn.Embedding(vocab_sizes['tones'], dim_tone, padding_idx=0)
+            # Normalization for Fusion
+            self.audio_norm = nn.LayerNorm(encoder_dim)
+            # text_norm is now inside DecomposedPhoneticEncoder
 
-            # Transformer Encoder replacing LSTM
-            self.pos_encoder = PositionalEncoding(pinyin_embed_dim, dropout)
-            encoder_layers = nn.TransformerEncoderLayer(d_model=pinyin_embed_dim, nhead=4, dim_feedforward=pinyin_embed_dim*4, dropout=dropout, batch_first=True)
-            self.pinyin_transformer = nn.TransformerEncoder(encoder_layers, num_layers=2)
-            
-            # Project Transformer output to match encoder_dim if needed
-            self.pinyin_proj = nn.Linear(pinyin_embed_dim, encoder_dim)
-            self.pinyin_pool = AttentionPooling(encoder_dim)
-            
             # Fusion Module
-            fusion_dim = encoder_dim * 2
+            # Concat(Audio, Text, Audio*Text) -> 3 * encoder_dim
+            fusion_dim = encoder_dim * 3
             self.fusion_se = SEBlock(fusion_dim, reduction=16)
             self.fusion_mlp = nn.Sequential(
                 nn.Linear(fusion_dim, fusion_dim // 2),
@@ -158,38 +207,16 @@ class CustomModel(nn.Module):
                 lens = pinyin_lengths.clone()
                 lens[lens == 0] = 1
             
-            emb_init = self.initial_embed(initial_inputs)
-            emb_final = self.final_embed(final_inputs)
-            emb_tone = self.tone_embed(tone_inputs)
+            # Get Linguistic Features
+            pinyin_feat = self.phonetic_encoder(initial_inputs, final_inputs, tone_inputs, lens)
             
-            pinyin_embed = torch.cat([emb_init, emb_final, emb_tone], dim=-1)
-            
-            # Add Positional Encoding
-            pinyin_embed = self.pos_encoder(pinyin_embed)
+            # Normalize Audio features before fusion
+            encoder_outputs = self.audio_norm(encoder_outputs)
+            # pinyin_feat is already normalized by DecomposedPhoneticEncoder
 
-            # Create Padding Mask for Transformer (True where padded)
-            # lens: (B)
-            B, T, _ = pinyin_embed.size()
-            # mask: (B, T) - True for padding positions
-            src_key_padding_mask = torch.arange(T, device=inputs.device).expand(B, T) >= lens.unsqueeze(1)
-
-            # Transformer Encoder
-            transformer_out = self.pinyin_transformer(pinyin_embed, src_key_padding_mask=src_key_padding_mask)
-            # transformer_out: (B, T, pinyin_embed_dim)
-            
-            # Project to encoder dimension
-            pinyin_feat_seq = self.pinyin_proj(transformer_out) # (B, T, encoder_dim)
-            
-            # Attention Pooling Mask (1 for valid, 0 for padding)
-            pool_mask = ~src_key_padding_mask
-            
-            # Attention Pooling
-            pinyin_feat = self.pinyin_pool(pinyin_feat_seq, pool_mask)
-            pinyin_feat = self.dropout_layer(pinyin_feat)
-            
-            # Combine features
-            encoder_outputs = self.dropout_layer(encoder_outputs)
-            combined_feat = torch.cat((encoder_outputs, pinyin_feat), dim=1)
+            # Bilinear Fusion: Concat(A, T, A*T)
+            interaction = encoder_outputs * pinyin_feat
+            combined_feat = torch.cat((encoder_outputs, pinyin_feat, interaction), dim=1)
             
             # Apply SE Block to reweight channels
             combined_feat = self.fusion_se(combined_feat)
