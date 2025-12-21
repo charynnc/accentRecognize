@@ -90,6 +90,36 @@ Class 甘肃: 78.00%
 Class 黑龙江: 89.00%
 ```
 
+
+7. 加拼音
+```
+Test Loss: 0.4113 Acc: 87.75%
+
+Per-class Accuracy:
+Class 四川: 96.50%
+Class 天津: 88.50%
+Class 安徽: 90.50%
+Class 山东: 87.00%
+Class 广西: 95.50%
+Class 河南: 72.00%
+Class 甘肃: 74.00%
+Class 黑龙江: 98.00%
+```
+韵母声调分开
+```
+Test Loss: 0.3587 Acc: 90.44%
+
+Per-class Accuracy:
+Class 四川: 92.50%
+Class 天津: 78.00%
+Class 安徽: 94.50%
+Class 山东: 94.00%
+Class 广西: 96.50%
+Class 河南: 84.00%
+Class 甘肃: 86.50%
+Class 黑龙江: 97.50%
+```
+
 #### 1000
 ResNet50
 ```
@@ -150,3 +180,5 @@ Class 河南: 47.00%
 Class 甘肃: 58.00%
 Class 黑龙江: 87.00%
 ```
+
+
